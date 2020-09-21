@@ -8,6 +8,7 @@ import argparse
 import multiprocessing
 import re
 import shutil
+import gzip
 
 #This contains code which generates a complete list of illumina adapters from scratch
 def generate_adapters_temporary_file():
@@ -636,14 +637,36 @@ def parse_adapters(full_list, detected_adapters, output, prefix = ""):
 	return(output+"/"+ prefix + "detected_adapters.fasta")
 	
 #paired end version of the full trim; trims using detected adapters with FaQCs -q 27, then fastp --cut_right window 3 qual 20
-def full_trim_pe(forward_in, reverse_in, forward_out, reverse_out, directory, adapters, threads, faqcs, fastp, score, minlen, window, window_qual, prefix, phred_fmt = "33"):
-	faqcs_command = [faqcs, "-t", str(threads), "-1", forward_in, "-2", reverse_in, "--artifactFile", adapters, "-q", str(score), "--min_L", str(minlen), "--prefix", "reads", "--trim_only", "-d", directory, "--ascii", phred_fmt]
-	fastp_command = [fastp, "-i", directory+"/reads.1.trimmed.fastq", "-I", directory+"/reads.2.trimmed.fastq", "-o", forward_out, "-O", reverse_out, "--adapter_fasta", adapters, "-l", str(minlen)]
+def full_trim_pe(forward_in, reverse_in, forward_out, reverse_out, directory, adapters, threads, faqcs, fastp, score, minlen, window, window_qual, prefix, phred_fmt = "33", advanced = False, skip_fastp = False, skip_faqcs = False):
+	'''
+	Command structure:
 	
-	fastp_command.append("--json")
-	fastp_command.append(directory + "/" + prefix + "post_trim_fastp.json")
-	fastp_command.append("--html")
-	fastp_command.append(directory + "/" + prefix + "post_trim_fastp.html")
+	The primary purpose is to issue a FaQCs call on the untrimmed reads, then a subsequent fastp call on the outputs from the FaQCs call. 
+	Additionally, supports using only one of the two tools. Commands will be built even if the tool is to be skipped, but the call will never be issued.
+	'''
+	
+	faqcs_command = [faqcs, "-t", str(threads), "-1", forward_in, "-2", reverse_in, "--artifactFile", adapters, "-q", str(score), "--min_L", str(minlen), "--prefix", "reads", "--trim_only", "-d", directory, "--ascii", phred_fmt]
+	fastp_command = [fastp, "--adapter_fasta", adapters, "-l", str(minlen), "--json", directory + "/" + prefix + "post_trim_fastp.json", "--html", directory + "/" + prefix + "post_trim_fastp.html"]
+
+	#Args can be added to fastp command with no consequences if fastp is skipped; command simply won't issue so they will be silent
+	if skip_faqcs:
+		#This handles taking the input reads directly
+		fastp_command.append("-i")
+		fastp_command.append(forward_in)
+		fastp_command.append("-I")
+		fastp_command.append(reverse_in)
+	else:
+		#FaQCs goes first; this is how I coerce FaQCs reads to look afterwards
+		fastp_command.append("-i")
+		fastp_command.append(directory+"/reads.1.trimmed.fastq")
+		fastp_command.append("-I")
+		fastp_command.append(directory+"/reads.2.trimmed.fastq")
+		
+	#Outputs are the same regardless of inputs
+	fastp_command.append("-o")
+	fastp_command.append(forward_out)
+	fastp_command.append("-O")
+	fastp_command.append(reverse_out)
 	
 	if int(window) > 0:
 		fastp_command.append("--cut_right")
@@ -655,24 +678,58 @@ def full_trim_pe(forward_in, reverse_in, forward_out, reverse_out, directory, ad
 	if phred_fmt != "33":
 		fastp_command.append("--phred64")
 		
-	subprocess.run(faqcs_command)
-	subprocess.run(fastp_command)
+	if advanced:
+		fastp_command.append("--trim_poly_g")
+		fastp_command.append("--low_complexity_filter")
+		
+	#Manage issuing of commands
+	if not skip_faqcs:
+		subprocess.run(faqcs_command)
+	if not skip_fastp:	
+		subprocess.run(fastp_command)
 	
-	os.remove(directory+"/reads.1.trimmed.fastq")
-	os.remove(directory+"/reads.2.trimmed.fastq")
-	os.remove(directory+"/reads.unpaired.trimmed.fastq")
+	if skip_fastp:
+		#rename FaQCs files to correct names; compress
+		compress_commands = [[directory+"/reads.1.trimmed.fastq", forward_out], [directory+"/reads.2.trimmed.fastq", reverse_out]]
+		#might as well be parallel
+		pool = multiprocessing.Pool(min(2, threads))
+		pool.map(compress_faqcs, compress_commands)
+		pool.close()
+		#remove this one in any event. We don't want any unpaireds with paired end
+		os.remove(directory+"/reads.unpaired.trimmed.fastq")
+	elif not skip_faqcs:
+		#remove FaQCs files if fastp has results or skip if FaQCs not done.
+		os.remove(directory+"/reads.1.trimmed.fastq")
+		os.remove(directory+"/reads.2.trimmed.fastq")
+		#remove this one in any event. We don't want any unpaireds with paired end - the call has to be duplicated, unfortunately.
+		os.remove(directory+"/reads.unpaired.trimmed.fastq")
 	
 	return None
 	
 #single end version of the full trim; trims using detected adapters with FaQCs -q 27, then fastp --cut_right window 3 qual 20
-def full_trim_se(reads_in, reads_out, directory, adapters, threads, faqcs, fastp, score, minlen, window, window_qual, prefix, phred_fmt = "33"):
-	faqcs_command = [faqcs, "-t", str(threads), "-u", reads_in, "--artifactFile", adapters, "-q", str(score), "--min_L", str(minlen), "--prefix", "reads", "--trim_only", "-d", directory, "--ascii", phred_fmt]
-	fastp_command = [fastp, "-i", directory+"/reads.unpaired.trimmed.fastq", "-o", reads_out, "--adapter_fasta", adapters, "-l", str(minlen)]
+def full_trim_se(reads_in, reads_out, directory, adapters, threads, faqcs, fastp, score, minlen, window, window_qual, prefix, phred_fmt = "33", advanced = False, skip_fastp = False, skip_faqcs = False):
+	'''
+	Command structure:
 	
-	fastp_command.append("--json")
-	fastp_command.append(directory + "/" + prefix + "post_trim_fastp.json")
-	fastp_command.append("--html")
-	fastp_command.append(directory + "/" + prefix + "post_trim_fastp.html")
+	The primary purpose is to issue a FaQCs call on the untrimmed reads, then a subsequent fastp call on the outputs from the FaQCs call. 
+	Additionally, supports using only one of the two tools. Commands will be built even if the tool is to be skipped, but the call will never be issued.
+	'''
+	faqcs_command = [faqcs, "-t", str(threads), "-u", reads_in, "--artifactFile", adapters, "-q", str(score), "--min_L", str(minlen), "--prefix", "reads", "--trim_only", "-d", directory, "--ascii", phred_fmt]
+	fastp_command = [fastp, "--adapter_fasta", adapters, "-l", str(minlen), "--json", directory + "/" + prefix + "post_trim_fastp.json", "--html", directory + "/" + prefix + "post_trim_fastp.html"]
+
+	#Args can be added to fastp command with no consequences if fastp is skipped; command simply won't issue so they will be silent
+	if skip_faqcs:
+		#This handles taking the input reads directly
+		fastp_command.append("-i")
+		fastp_command.append(reads_in)
+	else:
+		#FaQCs goes first; this is how I coerce FaQCs reads to look afterwards
+		fastp_command.append("-i")
+		fastp_command.append(directory+"/reads.1.trimmed.fastq")
+		
+	#Outputs are the same regardless of inputs
+	fastp_command.append("-o")
+	fastp_command.append(reads_out)
 	
 	if int(window) > 0:
 		fastp_command.append("--cut_right")
@@ -683,12 +740,35 @@ def full_trim_se(reads_in, reads_out, directory, adapters, threads, faqcs, fastp
 		
 	if phred_fmt != "33":
 		fastp_command.append("--phred64")
-		
-	subprocess.run(faqcs_command)
-	subprocess.run(fastp_command)
+
+	if advanced:
+		fastp_command.append("--trim_poly_g")
+		fastp_command.append("--low_complexity_filter")
 	
-	os.remove(directory+"/reads.unpaired.trimmed.fastq")
+	#Manage issuing of commands
+	if not skip_faqcs:
+		subprocess.run(faqcs_command)
+	if not skip_fastp:	
+		subprocess.run(fastp_command)
 	
+	if skip_fastp:
+		#compress the result
+		compress_faqcs([directory+"/reads.unpaired.trimmed.fastq", reads_out])
+	elif not skip_faqcs:
+		#remove FaQCs files if fastp has results or skip if FaQCs not run.
+		os.remove(directory+"/reads.unpaired.trimmed.fastq")
+	
+	return None
+
+#Assuming fastp is skipped, the FaQCs output would be uncompressed. This compresses it.
+def compress_faqcs(command_arr):
+	in_file, out_file = command_arr[0], command_arr[1]
+	print("Compressing "+in_file+"...", end = "")
+	with open(in_file, 'rb') as f_in:
+		with gzip.open(out_file, 'wb') as f_out:
+			shutil.copyfileobj(f_in, f_out)
+	os.remove(in_file)
+	print("done!")
 	return None
 
 #Stolen from a SO thread on how to issue usage information on an error.
@@ -723,15 +803,18 @@ def gather_opts():
 	parser.add_argument("--min_adapt_pres", "-m", dest = "minpres", default = 0.1, help = "Minimum presence of an adapter for it to be considered present in a set of reads.")
 	
 	#Shared options
-	parser.add_argument("--min_L", "-l", dest = "length", default = "10", help = "Minimum read length.")
-	parser.add_argument("--phred_fmt", dest = "phred", default = "33", help = "Phred q score format")
-	
+	parser.add_argument("--min_L", "-l", dest = "length", default = "50", help = "Minimum read length.")
+	parser.add_argument("--phred_fmt", dest = "phred", default = "33", help = "Phred q score format (default 33)")
+	parser.add_argument("--advanced", dest = "advanced", action = 'store_true', help = "Apply advanced trimming options (poly-G tail, low-complexity)")
+
 	#FaQCs opts
 	parser.add_argument("--score", "-s", dest= "score", default = "27", help = "FaQCs quality target")
-	
+	parser.add_argument("--skip_faqcs", dest = "skip_fq", action = 'store_true', help = "Do not trim with FaQCs (use fastp only). Cannot skip both.")
+
 	#fastp opts
 	parser.add_argument("--window", "-w", dest = "mid", default = "3", help = "Trimmomatic-like sliding window")
 	parser.add_argument("--window_qual", "-q", dest = "mid_q", default = "20", help = "Trim quality cutoff for trimmomatic window")
+	parser.add_argument("--skip_fastp", dest = "skip_fp", action = 'store_true', help = "Do not trim with fastp (use FaQCs only). Cannot skip both.")
 	
 	parser.add_argument("--falco", dest = "falco_path", default = "falco", help = "Location of Falco QC binary.")
 	parser.add_argument("--seqtk", dest = "seqtk_path", default = "seqtk", help = "Location of SeqTK binary.")
@@ -748,6 +831,14 @@ def main():
 	#Allows for the script to take no inputs and print help/usage
 	if len(sys.argv)==1:
 		help_message.print_help(sys.stderr)
+		sys.exit(1)
+		
+		
+	skip_fq = options.skip_fq
+	skip_fp = options.skip_fp
+	
+	if skip_fp and skip_fq:
+		print("Cannot skip both trimming tools. This would result in no trim at all.")
 		sys.exit(1)
 		
 	#file name prefix
@@ -788,6 +879,14 @@ def main():
 	
 	#No reads shorter than minlen
 	minlen = options.length
+	
+	#advanced trimming opts
+	#FaQCs:
+		# currently no opts
+	#Fastp:
+		# --trim_poly_g
+		# --low_complexity_filter
+	advanced = options.advanced
 	
 	#These options control the trimming behavior for fastp
 	mid = options.mid
@@ -851,7 +950,7 @@ def main():
 		
 		adapters_detected = adapter_identification_pe(complete_adapter_file_name, stk, fq, f, r, threads, final_output, minpres, prefix, phred)
 		cleaned_adapters = parse_adapters(adapter_set, adapters_detected, final_output, prefix)
-		full_trim_pe(f, r, post_trim_f, post_trim_r, final_output, cleaned_adapters, threads, fq, fp, score, minlen, mid, mid_q, prefix, phred)
+		full_trim_pe(f, r, post_trim_f, post_trim_r, final_output, cleaned_adapters, threads, fq, fp, score, minlen, mid, mid_q, prefix, phred, advanced, skip_fp, skip_fq)
 		#pre_trim_reads_f, pre_trim_reads_r, post_trim_reads_f, post_trim_reads_r, pre_name_f, post_name_f, pre_name_r, post_name_r, threads, falco_binary)
 		falco_qc_pe(f, r, post_trim_f, post_trim_r, pre_qc_f, post_qc_f, pre_qc_r, post_qc_r, threads, that_aint_falco)
 		
@@ -862,7 +961,7 @@ def main():
 		
 		adapters_detected = adapter_identification_se(complete_adapter_file_name, stk, fq, u, threads, final_output, minpres, prefix, phred)
 		cleaned_adapters = parse_adapters(adapter_set, adapters_detected, final_output, prefix)
-		full_trim_se(u, post_trim, final_output, cleaned_adapters, threads, fq, fp, score, minlen, mid, mid_q, prefix, phred)
+		full_trim_se(u, post_trim, final_output, cleaned_adapters, threads, fq, fp, score, minlen, mid, mid_q, prefix, phred, advanced, skip_fp, skip_fq)
 		#pre_trim_reads_f, pre_trim_reads_r, post_trim_reads_f, post_trim_reads_r, pre_name_f, post_name_f, pre_name_r, post_name_r, threads, falco_binary)
 		falco_qc_se(u, post_trim, pre_qc, post_qc, threads, that_aint_falco)
 	
