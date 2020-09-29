@@ -28,7 +28,7 @@ https://docs.google.com/presentation/d/1U87oUzMn-t-lJwOv3oVLv2oR9CpEVGYJpXV8dsBU
 
 <hr />
 
-# Workflow
+# Workflow Overview
 
 * A subsample of up to 100K reads is taken from the input(s)
 * The subsamples are run through FaQCs with report only mode on (no trimming) to detect adapters. Possible adapters come from this file: https://github.com/bio-miga/miga/blob/master/utils/adapters.fa
@@ -42,11 +42,13 @@ https://docs.google.com/presentation/d/1U87oUzMn-t-lJwOv3oVLv2oR9CpEVGYJpXV8dsBU
 
 <hr />
 
-# Summary
+# Brief Summary
 
 * Input reads -> FaQCs trims originals -> fastp  trims FaQCs outputs -> output reads
 
 <hr />
+
+# Tools multitrim uses
 
 Read Trimmers
 
