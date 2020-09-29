@@ -787,7 +787,7 @@ def gather_opts():
 	#Use all available cores.
 	parser.add_argument("--max", dest = "Sheev", action = 'store_true', help = "Have you ever heard the tragedy of Darth Parallelegius? Uses all available processors.")
 	#Or this many threads. Laaaaame
-	parser.add_argument("--threads", "-t", dest = "threads", default = 1, help = "How many threads do you want to use? Use --UNLIMITED_POWER flag to use all of them (DO IT).")
+	parser.add_argument("--threads", "-t", dest = "threads", default = 1, help = "How many threads do you want to use? Use --max flag to use all of them (DO IT).")
 
 	#file inputs
 	parser.add_argument("--forward", "-1", dest = "f", default = "", help = "Forward Strand Reads (use -u for unpaired reads)")
