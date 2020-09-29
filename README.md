@@ -22,9 +22,9 @@ NOTE:
 
 Currently Falco is under development. The post-trim QC may fail. If this happens, the python script will issue an error and the post trim QC HTML will be missing. Please email me if this happens.
 
-TEMPORARY:
+# User Manual
 
-I am in the process of creating an acutal workflow document for this script, but the following is a brief overview of the internal functioning of multitrim:
+https://docs.google.com/presentation/d/1U87oUzMn-t-lJwOv3oVLv2oR9CpEVGYJpXV8dsBU4zM/edit?usp=sharing
 
 <hr />
 
