@@ -28,6 +28,8 @@ I am in the process of creating an acutal workflow document for this script, but
 
 <hr />
 
+#Workflow
+
 * A subsample of up to 100K reads is taken from the input(s)
 * The subsamples are run through FaQCs with report only mode on (no trimming) to detect adapters. Possible adapters come from this file: https://github.com/bio-miga/miga/blob/master/utils/adapters.fa
 * The adapters detected (if any) are considered present if FaQCs reports them in a default 0.1% of reads. All adapters which are a part of the detected illumina kit(s) are included, e.g. detecting any one ilumina SE adapter will include ALL illumina SE adapters in the trim. The "families" of adapters can be seen at line breaks in the linked adapters.fa file
@@ -40,13 +42,24 @@ I am in the process of creating an acutal workflow document for this script, but
 
 <hr />
 
+#Summary
 
 * In essence: input reads -> FaQCs trims originals -> fastp  trims FaQCs outputs -> output reads
 
 <hr />
+
+#Trimmers
 
 * Tools for trimming:
 
 * FaQCs: https://github.com/LANL-Bioinformatics/FaQCs
 
 * Fastp: https://github.com/OpenGene/fastp
+
+#QC
+
+* Falco: https://github.com/smithlabcode/falco/tree/master/src
+
+#Sampling
+
+* SeqTK: https://github.com/lh3/seqtk
