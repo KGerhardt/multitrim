@@ -392,9 +392,9 @@ def names_se(reads, outdir = ".", prefix = ""):
 		base_name = base_name[:-3]
 	base_name = os.path.splitext(base_name)[0]
 
-	pre_qc = outdir + "/" + prefix + "1.pre_trim_QC_" + base_name	
-	post_qc = outdir + "/" + prefix + "1.post_trim_QC_" + base_name
-	post_trim_reads = outdir + "/" + prefix + "1.trimmed_" + base_name + ".fq.gz"
+	pre_qc = outdir + "/" + prefix + "unpaired.pre_trim_QC_" + base_name	
+	post_qc = outdir + "/" + prefix + "unpaired.post_trim_QC_" + base_name
+	post_trim_reads = outdir + "/" + prefix + "unpaired.trimmed_" + base_name + ".fq.gz"
 	
 	return pre_qc, post_qc, post_trim_reads
 
@@ -725,7 +725,7 @@ def full_trim_se(reads_in, reads_out, directory, adapters, threads, faqcs, fastp
 	else:
 		#FaQCs goes first; this is how I coerce FaQCs reads to look afterwards
 		fastp_command.append("-i")
-		fastp_command.append(directory+"/reads.1.trimmed.fastq")
+		fastp_command.append(directory+"/reads.unpaired.trimmed.fastq")
 		
 	#Outputs are the same regardless of inputs
 	fastp_command.append("-o")
