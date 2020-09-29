@@ -28,7 +28,7 @@ I am in the process of creating an acutal workflow document for this script, but
 
 <hr />
 
-#Workflow
+# Workflow
 
 * A subsample of up to 100K reads is taken from the input(s)
 * The subsamples are run through FaQCs with report only mode on (no trimming) to detect adapters. Possible adapters come from this file: https://github.com/bio-miga/miga/blob/master/utils/adapters.fa
@@ -42,13 +42,13 @@ I am in the process of creating an acutal workflow document for this script, but
 
 <hr />
 
-#Summary
+# Summary
 
 * In essence: input reads -> FaQCs trims originals -> fastp  trims FaQCs outputs -> output reads
 
 <hr />
 
-#Trimmers
+Read Trimmers
 
 * Tools for trimming:
 
@@ -56,10 +56,10 @@ I am in the process of creating an acutal workflow document for this script, but
 
 * Fastp: https://github.com/OpenGene/fastp
 
-#QC
+QC
 
 * Falco: https://github.com/smithlabcode/falco/tree/master/src
 
-#Sampling
+Sampling
 
 * SeqTK: https://github.com/lh3/seqtk
