@@ -26,6 +26,7 @@ TEMPORARY:
 
 I am in the process of creating an acutal workflow document for this script, but the following is a brief overview of the internal functioning of multitrim:
 
+<hr />
 
 * A subsample of up to 100K reads is taken from the input(s)
 * The subsamples are run through FaQCs with report only mode on (no trimming) to detect adapters. Possible adapters come from this file: https://github.com/bio-miga/miga/blob/master/utils/adapters.fa
@@ -37,7 +38,12 @@ I am in the process of creating an acutal workflow document for this script, but
 * The final post-trim reads are output
 * QC reports are performed on pre/post trim reads all at once.
 
+<hr />
+
+
 * In essence: input reads -> FaQCs trims originals -> fastp  trims FaQCs outputs -> output reads
+
+<hr />
 
 * Tools for trimming:
 
