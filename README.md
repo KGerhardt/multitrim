@@ -44,7 +44,7 @@ I am in the process of creating an acutal workflow document for this script, but
 
 # Summary
 
-* In essence: input reads -> FaQCs trims originals -> fastp  trims FaQCs outputs -> output reads
+* Input reads -> FaQCs trims originals -> fastp  trims FaQCs outputs -> output reads
 
 <hr />
 
