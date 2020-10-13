@@ -7,3 +7,7 @@ dependencies:
   
 channels:
   - bioconda
+
+source:
+  git_url: https://github.com/KGerhardt/multitrim.git
+  git_depth: 1 # (Defaults to -1/not shallow)
