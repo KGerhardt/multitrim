@@ -7,3 +7,6 @@ dependencies:
   
 channels:
   - bioconda
+
+source:
+  git_url: https://github.com/KGerhardt/multitrim.git
