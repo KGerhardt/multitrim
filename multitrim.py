@@ -646,7 +646,7 @@ def full_trim_pe(forward_in, reverse_in, forward_out, reverse_out, directory, ad
 	'''
 	
 	faqcs_command = [faqcs, "-t", str(threads), "-1", forward_in, "-2", reverse_in, "--artifactFile", adapters, "-q", str(score), "--min_L", str(minlen), "--prefix", "reads", "--trim_only", "-d", directory, "--ascii", phred_fmt]
-	fastp_command = [fastp, "--adapter_fasta", adapters, "-l", str(minlen), "--json", directory + "/" + prefix + "post_trim_fastp.json", "--html", directory + "/" + prefix + "post_trim_fastp.html"]
+	fastp_command = [fastp, "--compression", "4", "--adapter_fasta", adapters, "-l", str(minlen), "--json", directory + "/" + prefix + "post_trim_fastp.json", "--html", directory + "/" + prefix + "post_trim_fastp.html"]
 
 	#Args can be added to fastp command with no consequences if fastp is skipped; command simply won't issue so they will be silent
 	if skip_faqcs:
@@ -685,8 +685,11 @@ def full_trim_pe(forward_in, reverse_in, forward_out, reverse_out, directory, ad
 	#Manage issuing of commands
 	if not skip_faqcs:
 		subprocess.run(faqcs_command)
+		os.remove(directory + "/" + "reads.stats.txt")
 	if not skip_fastp:	
 		subprocess.run(fastp_command)
+		os.remove(directory + "/" + prefix + "post_trim_fastp.json")
+		os.remove(directory + "/" + prefix + "post_trim_fastp.html")
 	
 	if skip_fastp:
 		#rename FaQCs files to correct names; compress
@@ -715,7 +718,7 @@ def full_trim_se(reads_in, reads_out, directory, adapters, threads, faqcs, fastp
 	Additionally, supports using only one of the two tools. Commands will be built even if the tool is to be skipped, but the call will never be issued.
 	'''
 	faqcs_command = [faqcs, "-t", str(threads), "-u", reads_in, "--artifactFile", adapters, "-q", str(score), "--min_L", str(minlen), "--prefix", "reads", "--trim_only", "-d", directory, "--ascii", phred_fmt]
-	fastp_command = [fastp, "--adapter_fasta", adapters, "-l", str(minlen), "--json", directory + "/" + prefix + "post_trim_fastp.json", "--html", directory + "/" + prefix + "post_trim_fastp.html"]
+	fastp_command = [fastp, "--compression", "4", "--adapter_fasta", adapters, "-l", str(minlen), "--json", directory + "/" + prefix + "post_trim_fastp.json", "--html", directory + "/" + prefix + "post_trim_fastp.html"]
 
 	#Args can be added to fastp command with no consequences if fastp is skipped; command simply won't issue so they will be silent
 	if skip_faqcs:
@@ -748,8 +751,11 @@ def full_trim_se(reads_in, reads_out, directory, adapters, threads, faqcs, fastp
 	#Manage issuing of commands
 	if not skip_faqcs:
 		subprocess.run(faqcs_command)
+		os.remove(directory + "/" + "reads.stats.txt")
 	if not skip_fastp:	
 		subprocess.run(fastp_command)
+		os.remove(directory + "/" + prefix + "post_trim_fastp.json")
+		os.remove(directory + "/" + prefix + "post_trim_fastp.html")
 	
 	if skip_fastp:
 		#compress the result
@@ -925,6 +931,18 @@ def main():
 		paired_end = True
 	else:
 		paired_end = False
+		
+	if paired_end:
+		if not os.path.exists(f): 
+			print("Forward Reads: " + f + " not found. Multitrim will exit.")
+			quit()
+		if not os.path.exists(r): 
+			print("Reverse Reads: " + r + " not found. Multitrim will exit.")
+			quit()
+	else:
+		if not os.path.exists(u): 
+			print("Unpaired Reads: " + u + " not found. Multitrim will exit.")
+			quit()
 	
 	#Check if a directory is specified and which doesn't exist; create if needed.
 	if final_output != ".":
