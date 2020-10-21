@@ -4,6 +4,8 @@ dependencies:
   - falco
   - seqtk
   - fastp
+  - multitrim-kgerhardt
   
 channels:
   - bioconda
+  - kgerhardt
