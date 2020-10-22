@@ -498,9 +498,11 @@ def adapter_identification_pe(artificial_artifacts, seqtk_binary, faqcs_binary, 
 	if prefix != "":
 		faqcs_subset_command.append("--prefix")
 		faqcs_subset_command.append(prefix + "Subsample_Adapter_Detection")
+		pdf_name = prefix + "Subsample_Adapter_Detection_qc_report.pdf"
 	else :
 		faqcs_subset_command.append("--prefix")
 		faqcs_subset_command.append("Subsample_Adapter_Detection")
+		pdf_name = "Subsample_Adapter_Detection_qc_report.pdf"
 		
 	#forward strand
 	faqcs_subset_command.append("-1")
@@ -513,6 +515,8 @@ def adapter_identification_pe(artificial_artifacts, seqtk_binary, faqcs_binary, 
 	print("Detecting adapters now... ", end = "")
 	ps = subprocess.Popen(faqcs_subset_command)
 	ps.wait()
+	
+	os.remove(output + "/" + pdf_name)
 	
 	#Adapter detection from output of FaQCs
 	detection_report = open(output + "/" + prefix + "Subsample_Adapter_Detection.stats.txt")
@@ -559,9 +563,11 @@ def adapter_identification_se(artificial_artifacts, seqtk_binary, faqcs_binary, 
 	if prefix != "":
 		faqcs_subset_command.append("--prefix")
 		faqcs_subset_command.append(prefix + "Subsample_Adapter_Detection")
+		pdf_name = prefix + "Subsample_Adapter_Detection_qc_report.pdf"
 	else :
 		faqcs_subset_command.append("--prefix")
 		faqcs_subset_command.append("Subsample_Adapter_Detection")
+		pdf_name = "Subsample_Adapter_Detection_qc_report.pdf"
 		
 	#forward strand
 	faqcs_subset_command.append("-u")
@@ -571,6 +577,8 @@ def adapter_identification_se(artificial_artifacts, seqtk_binary, faqcs_binary, 
 	print("Detecting adapters now... ", end = "")
 	ps = subprocess.Popen(faqcs_subset_command)
 	ps.wait()
+	
+	os.remove(output + "/" + pdf_name)
 	
 	#Adapter detection from output of FaQCs
 	detection_report = open(output + "/" + prefix + "Subsample_Adapter_Detection.stats.txt")
