@@ -809,7 +809,7 @@ def gather_opts():
 	parser.add_argument("--unpaired", "-u", dest = "u", default = "", help = "Unpaired Reads")
 	
 	#final out directory
-	parser.add_argument("--output", "-o", dest = "outdir", default = ".", help = "Directory to send final outputs. Must exist.")
+	parser.add_argument("--output", "-o", dest = "outdir", default = ".", help = "Directory to send final outputs.")
 	#naming convention
 	parser.add_argument("--prefix", "-p", dest = "pref", default = "", help = "Prefix to place on outputs.")
 	
@@ -817,17 +817,17 @@ def gather_opts():
 	parser.add_argument("--min_adapt_pres", "-m", dest = "minpres", default = 0.1, help = "Minimum presence of an adapter for it to be considered present in a set of reads.")
 	
 	#Shared options
-	parser.add_argument("--min_L", "-l", dest = "length", default = "50", help = "Minimum read length.")
+	parser.add_argument("--min_L", "-l", dest = "length", default = "50", help = "Minimum read length. Default 50 base pairs.")
 	parser.add_argument("--phred_fmt", dest = "phred", default = "33", help = "Phred q score format (default 33)")
-	parser.add_argument("--advanced", dest = "advanced", action = 'store_true', help = "Apply advanced trimming options (poly-G tail, low-complexity)")
+	parser.add_argument("--advanced", dest = "advanced", action = 'store_true', help = "Apply advanced trimming options (poly-G tail, low-complexity). Only useful for reads sequenced with 2-dye chemistry.")
 
 	#FaQCs opts
-	parser.add_argument("--score", "-s", dest= "score", default = "27", help = "FaQCs quality target")
+	parser.add_argument("--score", "-s", dest= "score", default = "27", help = "FaQCs quality target. Default 27")
 	parser.add_argument("--skip_faqcs", dest = "skip_fq", action = 'store_true', help = "Do not trim with FaQCs (use fastp only). Cannot skip both.")
 
 	#fastp opts
-	parser.add_argument("--window", "-w", dest = "mid", default = "3", help = "Trimmomatic-like sliding window")
-	parser.add_argument("--window_qual", "-q", dest = "mid_q", default = "20", help = "Trim quality cutoff for trimmomatic window")
+	parser.add_argument("--window", "-w", dest = "mid", default = "3", help = "Trimmomatic-like sliding window. Default 3.")
+	parser.add_argument("--window_qual", "-q", dest = "mid_q", default = "20", help = "Trim quality cutoff for trimmomatic window. Default 20.")
 	parser.add_argument("--skip_fastp", dest = "skip_fp", action = 'store_true', help = "Do not trim with fastp (use FaQCs only). Cannot skip both.")
 	
 	parser.add_argument("--falco", dest = "falco_path", default = "falco", help = "Location of Falco QC binary.")
@@ -845,14 +845,14 @@ def main():
 	#Allows for the script to take no inputs and print help/usage
 	if len(sys.argv)==1:
 		help_message.print_help(sys.stderr)
-		sys.exit(1)
+		quit()
 		
 		
 	skip_fq = options.skip_fq
 	skip_fp = options.skip_fp
 	
 	if skip_fp and skip_fq:
-		print("Cannot skip both trimming tools. This would result in no trim at all.")
+		print("Cannot skip both trimming tools. This would result in no trim at all. Exiting program.")
 		sys.exit(1)
 		
 	#file name prefix
@@ -860,7 +860,8 @@ def main():
 	
 	#Make it more convenient for me later
 	if prefix != "":
-		prefix = prefix + "_"
+		if not prefix.endswith("_"):
+			prefix = prefix + "_"
 	
 	#tool binaries
 	fp = options.fastp_path
@@ -878,15 +879,13 @@ def main():
 	
 	#num threads
 	threads = options.threads
-	#Check to ensure a user doesn't request more procs than available.
-	threads = min(threads, len(os.sched_getaffinity(0)))
-	#Uses all the threads a system has available. This is written specifically to permit function in a child process on a unix server in which
-	#there are fewer threads/processors available to this program than exist on the system.
+	#Check for --max flag
 	if options.Sheev:
+		#Detects and uses all the threads a system has available.
 		threads = len(os.sched_getaffinity(0))
-		print("Using all available cores. Number of cores:", threads)
 	else:
-		print("Working with", threads, "threads.")
+		#Check to ensure a user doesn't request more procs than available.
+		threads = min(threads, len(os.sched_getaffinity(0)))
 	
 	#Adapters detected if minpres% of reads have that specific adapter present according to FaQCs stats.
 	minpres = float(options.minpres)
@@ -896,13 +895,13 @@ def main():
 	
 	#advanced trimming opts
 	#FaQCs:
-		# currently no opts
+		# currently no advanced opts
 	#Fastp:
 		# --trim_poly_g
 		# --low_complexity_filter
 	advanced = options.advanced
 	
-	#These options control the trimming behavior for fastp
+	#These options control the trimming behavior for fastp, correspond to sliding window width and avg. quality min.
 	mid = options.mid
 	mid_q = options.mid_q
 	
@@ -918,20 +917,17 @@ def main():
 	
 	#Check to make sure it actually has data, or exits
 	if f == "" and r == "" and u == "":
-		print("I need to be given reads! Exiting program.")
-		help_message.print_help(sys.stderr)
+		print("I need to be given reads! Use -1 and -2 for paired-end reads, or -u for unpaired reads. Exiting program.")
 		quit()
 	
 	#Check to make sure that a forward read is paired with a reverse read if either is supplied
 	if f == "" and r != "" or f != "" and r == "":
 		print("If you have paired reads, I need both the forward and reverse files. If you just want to process one, use -u to specify it. Exiting program.")
-		help_message.print_help(sys.stderr)
 		quit()
 		
 	#fastp cannot take both unpaired and paired simultaneously
 	if u != "" and (r != "" or f != ""):
 		print("If you have paired reads, I need both the forward and reverse files. If you just want to process one, use -u to specify it. Exiting program.")
-		help_message.print_help(sys.stderr)
 		quit()
 	
 	#Determine single or paired end mode
@@ -941,24 +937,31 @@ def main():
 		paired_end = False
 		
 	if paired_end:
+		quit_out = False
 		if not os.path.exists(f): 
 			print("Forward Reads: " + f + " not found. Multitrim will exit.")
-			quit()
+			quit_out = True
 		if not os.path.exists(r): 
 			print("Reverse Reads: " + r + " not found. Multitrim will exit.")
+			quit_out = True
+			
+		if quit_out:
 			quit()
+			
 	else:
 		if not os.path.exists(u): 
 			print("Unpaired Reads: " + u + " not found. Multitrim will exit.")
 			quit()
 	
-	#Check if a directory is specified and which doesn't exist; create if needed.
+	#Check if a directory is specified and which doesn't exist; try to create if needed or exit gracefully.
+	#This has to happen last, or it risks making the directory when the program is otherwise going to quit.
 	if final_output != ".":
 		if not os.path.exists(final_output):
-			os.mkdir(final_output)
-		
-	#User feedback
-	print("Adapters considered detected if present in "+ str(minpres) + " % of reads.")
+			try:
+				os.mkdir(final_output)
+			except:
+				print("Multitrim wasn't able to find or create the specified output directory. Exiting program.")
+				quit()
 
 	#User feedback
 	if final_output == ".":
@@ -969,9 +972,17 @@ def main():
 	#necessary preparation - creates all adapters file from scratch.
 	adapter_set, complete_adapter_file_name = generate_adapters_temporary_file()
 	
+	if options.Sheev:
+		print("Using all available cores. Number of cores:", threads)
+	else:
+		print("Working with", threads, "threads.")
+	
 	if paired_end:
 		#two inputs; paired end behavior
 		print("Primary Strand Reads:", f, "\nReverse Strand Reads:", r)
+		#User feedback
+		print("Adapters considered detected if present in "+ str(minpres) + " % of reads.")
+		
 		pre_qc_f, pre_qc_r, post_qc_f, post_qc_r, post_trim_f, post_trim_r = names_pe(f, r, final_output, prefix)
 		
 		adapters_detected = adapter_identification_pe(complete_adapter_file_name, stk, fq, f, r, threads, final_output, minpres, prefix, phred)
@@ -983,6 +994,9 @@ def main():
 	else:
 		#one input; SE behavior
 		print("Unpaired Reads:", u)
+		#User feedback
+		print("Adapters considered detected if present in "+ str(minpres) + " % of reads.")
+		
 		pre_qc, post_qc, post_trim = names_se(u, final_output, prefix)
 		
 		adapters_detected = adapter_identification_se(complete_adapter_file_name, stk, fq, u, threads, final_output, minpres, prefix, phred)
@@ -998,7 +1012,10 @@ if __name__ == "__main__":
 	main()
 
 
-#Leftover creation functions.	
+	
+#End of functional components of Multitrim.	
+
+#Leftover creation functions that could be used to update the list of adapters. Not used in the program proper.
 	
 #Regenerate adatapers file output from a fasta. This is a utility function I do not expect to see used in the final product.	
 def fasta_to_permanent_python(original_adapters_fasta):
