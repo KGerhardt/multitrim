@@ -8,12 +8,13 @@ import argparse
 import multiprocessing
 import re
 import shutil
-import gzip
+from datetime import datetime
+#import gzip
 
 #This contains code which generates a complete list of illumina adapters from scratch
 def generate_adapters_temporary_file():
 
-	print("Preparing adapter file for you.")
+	#print("Preparing adapter file for you.")
 	adapters_dict = {}
 	
 	'''
@@ -380,8 +381,8 @@ def names_pe(forward, reverse, outdir = ".", prefix = ""):
 	post_qc_f = outdir + "/" + prefix + "1.post_trim_QC_" + forward_basename
 	post_qc_r = outdir + "/" + prefix + "2.post_trim_QC_" + reverse_basename
 	
-	post_trim_reads_f = outdir + "/" + prefix + "1.trimmed_" + forward_basename + ".fq.gz"
-	post_trim_reads_r = outdir + "/" + prefix + "2.trimmed_" + reverse_basename + ".fq.gz"
+	post_trim_reads_f = outdir + "/" + prefix + "1.post_trim_" + forward_basename + ".fq"
+	post_trim_reads_r = outdir + "/" + prefix + "2.post_trim_" + reverse_basename + ".fq"
 	
 	return pre_qc_f, pre_qc_r, post_qc_f, post_qc_r, post_trim_reads_f, post_trim_reads_r
 	
@@ -394,7 +395,7 @@ def names_se(reads, outdir = ".", prefix = ""):
 
 	pre_qc = outdir + "/" + prefix + "unpaired.pre_trim_QC_" + base_name	
 	post_qc = outdir + "/" + prefix + "unpaired.post_trim_QC_" + base_name
-	post_trim_reads = outdir + "/" + prefix + "unpaired.trimmed_" + base_name + ".fq.gz"
+	post_trim_reads = outdir + "/" + prefix + "unpaired.post_trim_" + base_name + ".fq"
 	
 	return pre_qc, post_qc, post_trim_reads
 
@@ -417,6 +418,8 @@ def do_falco(read_name_tool):
 	command = [falco_path, "--quiet", "-o", loc, reads]
 	
 	#run the command
+	#Working perfectly, the falco call should not produce any output. Until falco has bugs patched, it's not working perfectly
+	#subprocess.call(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 	subprocess.call(command)
 	
 	#move the results and rename
@@ -433,10 +436,12 @@ def do_falco(read_name_tool):
 def falco_qc_pe(pre_trim_reads_f, pre_trim_reads_r, post_trim_reads_f, post_trim_reads_r, pre_name_f, post_name_f, pre_name_r, post_name_r, threads, falco_binary):
 	pre_forward = [pre_trim_reads_f, pre_name_f, falco_binary]
 	pre_reverse = [pre_trim_reads_r, pre_name_r, falco_binary]
-	post_forward = [post_trim_reads_f, post_name_f, falco_binary]
-	post_reverse = [post_trim_reads_r, post_name_r, falco_binary]
+	post_forward = [post_trim_reads_f+".gz", post_name_f, falco_binary]
+	post_reverse = [post_trim_reads_r+".gz", post_name_r, falco_binary]
 	
 	commands = [pre_forward, pre_reverse, post_forward, post_reverse]
+	
+	print("Generating QC reports.")
 	
 	pool = multiprocessing.Pool(min(4, threads))
 	
@@ -447,9 +452,11 @@ def falco_qc_pe(pre_trim_reads_f, pre_trim_reads_r, post_trim_reads_f, post_trim
 #do all QC at once
 def falco_qc_se(pre_trim_reads, post_trim_reads, pre_name, post_name, threads, falco_binary):
 	pre = [pre_trim_reads, pre_name, falco_binary]
-	post = [post_trim_reads, post_name, falco_binary]
+	post = [post_trim_reads+".gz", post_name, falco_binary]
 	
 	commands = [pre, post]
+	
+	print("Generating QC reports.")
 	
 	pool = multiprocessing.Pool(min(2, threads))
 	
@@ -654,7 +661,7 @@ def full_trim_pe(forward_in, reverse_in, forward_out, reverse_out, directory, ad
 	'''
 	
 	faqcs_command = [faqcs, "-t", str(threads), "-1", forward_in, "-2", reverse_in, "--artifactFile", adapters, "-q", str(score), "--min_L", str(minlen), "--prefix", "reads", "--trim_only", "-d", directory, "--ascii", phred_fmt]
-	fastp_command = [fastp, "--compression", "4", "--adapter_fasta", adapters, "-l", str(minlen), "--json", directory + "/" + prefix + "post_trim_fastp.json", "--html", directory + "/" + prefix + "post_trim_fastp.html"]
+	fastp_command = [fastp, "--thread", str(threads), "--adapter_fasta", adapters, "-l", str(minlen), "--json", directory + "/" + prefix + "post_trim_fastp.json", "--html", directory + "/" + prefix + "post_trim_fastp.html"]
 
 	#Args can be added to fastp command with no consequences if fastp is skipped; command simply won't issue so they will be silent
 	if skip_faqcs:
@@ -690,30 +697,49 @@ def full_trim_pe(forward_in, reverse_in, forward_out, reverse_out, directory, ad
 		fastp_command.append("--trim_poly_g")
 		fastp_command.append("--low_complexity_filter")
 		
+	time_format = "%d/%m/%Y %H:%M:%S"	
+	
 	#Manage issuing of commands
 	if not skip_faqcs:
-		subprocess.run(faqcs_command)
+		timer = datetime.now()
+		printable_time = timer.strftime(time_format)
+		print("Trimming with FaQCs. Started at:", printable_time)
+		subprocess.run(faqcs_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 		os.remove(directory + "/" + "reads.stats.txt")
-	if not skip_fastp:	
-		subprocess.run(fastp_command)
+		
+	if not skip_fastp:
+		timer = datetime.now()
+		printable_time = timer.strftime(time_format)
+		print("Trimming with Fastp. Started at:", printable_time)
+		subprocess.run(fastp_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 		os.remove(directory + "/" + prefix + "post_trim_fastp.json")
 		os.remove(directory + "/" + prefix + "post_trim_fastp.html")
+		
+	
+	
+	#We want to rename the non-fastp files, then pass all files and threads to compress with pigz under the nice, neat names
 	
 	if skip_fastp:
 		#rename FaQCs files to correct names; compress
-		compress_commands = [[directory+"/reads.1.trimmed.fastq", forward_out], [directory+"/reads.2.trimmed.fastq", reverse_out]]
-		#might as well be parallel
-		pool = multiprocessing.Pool(min(2, threads))
-		pool.map(compress_faqcs, compress_commands)
-		pool.close()
+		
 		#remove this one in any event. We don't want any unpaireds with paired end
 		os.remove(directory+"/reads.unpaired.trimmed.fastq")
+		shutil.move(directory+"/reads.1.trimmed.fastq", forward_out)
+		shutil.move(directory+"/reads.2.trimmed.fastq", reverse_out)
+		#compress_commands = [[directory+"/reads.1.trimmed.fastq", forward_out], [directory+"/reads.2.trimmed.fastq", reverse_out]]
+		#might as well be parallel
+		#pool = multiprocessing.Pool(min(2, threads))
+		#pool.map(compress_faqcs, compress_commands)
+		#pool.close()
+		
 	elif not skip_faqcs:
 		#remove FaQCs files if fastp has results or skip if FaQCs not done.
 		os.remove(directory+"/reads.1.trimmed.fastq")
 		os.remove(directory+"/reads.2.trimmed.fastq")
 		#remove this one in any event. We don't want any unpaireds with paired end - the call has to be duplicated, unfortunately.
 		os.remove(directory+"/reads.unpaired.trimmed.fastq")
+		
+	compress_results([forward_out, reverse_out], threads)
 	
 	return None
 	
@@ -726,7 +752,7 @@ def full_trim_se(reads_in, reads_out, directory, adapters, threads, faqcs, fastp
 	Additionally, supports using only one of the two tools. Commands will be built even if the tool is to be skipped, but the call will never be issued.
 	'''
 	faqcs_command = [faqcs, "-t", str(threads), "-u", reads_in, "--artifactFile", adapters, "-q", str(score), "--min_L", str(minlen), "--prefix", "reads", "--trim_only", "-d", directory, "--ascii", phred_fmt]
-	fastp_command = [fastp, "--compression", "4", "--adapter_fasta", adapters, "-l", str(minlen), "--json", directory + "/" + prefix + "post_trim_fastp.json", "--html", directory + "/" + prefix + "post_trim_fastp.html"]
+	fastp_command = [fastp, "--thread", str(threads), "--adapter_fasta", adapters, "-l", str(minlen), "--json", directory + "/" + prefix + "post_trim_fastp.json", "--html", directory + "/" + prefix + "post_trim_fastp.html"]
 
 	#Args can be added to fastp command with no consequences if fastp is skipped; command simply won't issue so they will be silent
 	if skip_faqcs:
@@ -756,24 +782,59 @@ def full_trim_se(reads_in, reads_out, directory, adapters, threads, faqcs, fastp
 		fastp_command.append("--trim_poly_g")
 		fastp_command.append("--low_complexity_filter")
 	
+	time_format = "%d/%m/%Y %H:%M:%S"	
+	
 	#Manage issuing of commands
 	if not skip_faqcs:
-		subprocess.run(faqcs_command)
+		timer = datetime.now()
+		printable_time = timer.strftime(time_format)
+		print("Trimming with FaQCs. Started at:", printable_time)
+		subprocess.run(faqcs_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 		os.remove(directory + "/" + "reads.stats.txt")
-	if not skip_fastp:	
-		subprocess.run(fastp_command)
+		
+	if not skip_fastp:
+		timer = datetime.now()
+		printable_time = timer.strftime(time_format)
+		print("Trimming with Fastp. Started at:", printable_time)
+		subprocess.run(fastp_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 		os.remove(directory + "/" + prefix + "post_trim_fastp.json")
 		os.remove(directory + "/" + prefix + "post_trim_fastp.html")
-	
+		
+		
 	if skip_fastp:
 		#compress the result
-		compress_faqcs([directory+"/reads.unpaired.trimmed.fastq", reads_out])
+		#remove this one in any event. We don't want any unpaireds with paired end
+		shutil.move(directory+"/reads.unpaired.trimmed.fastq", reads_out)
 	elif not skip_faqcs:
 		#remove FaQCs files if fastp has results or skip if FaQCs not run.
 		os.remove(directory+"/reads.unpaired.trimmed.fastq")
 	
+	compress_results([reads_out], threads)
+	
 	return None
 
+#Uses pigz to compress results	
+def compress_results(files, threads):
+
+	time_format = "%d/%m/%Y %H:%M:%S"
+
+	for i in range(0, len(files)):
+		timer = datetime.now()
+		printable_time = timer.strftime(time_format)
+		print("Compressing", files[i], "Starting at:", printable_time)
+		
+		#pigz_comm = ["pigz", "--best", "-p", str(threads), files[i]]
+		pigz_comm = ["pigz", "-p", str(threads), files[i]]
+		
+		subprocess.run(pigz_comm)
+		
+		
+		
+	print("Outputs compressed!")
+	
+	return None
+
+#deprecated
 #Assuming fastp is skipped, the FaQCs output would be uncompressed. This compresses it.
 def compress_faqcs(command_arr):
 	in_file, out_file = command_arr[0], command_arr[1]
@@ -782,7 +843,7 @@ def compress_faqcs(command_arr):
 		with gzip.open(out_file, 'wb') as f_out:
 			shutil.copyfileobj(f_in, f_out)
 	os.remove(in_file)
-	print("done!")
+	
 	return None
 
 #Stolen from a SO thread on how to issue usage information on an error.
@@ -875,10 +936,10 @@ def main():
 	u = options.u
 	
 	#phred format
-	phred = options.phred
+	phred = str(options.phred)
 	
 	#num threads
-	threads = options.threads
+	threads = int(options.threads)
 	#Check for --max flag
 	if options.Sheev:
 		#Detects and uses all the threads a system has available.
@@ -891,7 +952,7 @@ def main():
 	minpres = float(options.minpres)
 	
 	#No reads shorter than minlen
-	minlen = options.length
+	minlen = str(options.length)
 	
 	#advanced trimming opts
 	#FaQCs:
@@ -902,11 +963,11 @@ def main():
 	advanced = options.advanced
 	
 	#These options control the trimming behavior for fastp, correspond to sliding window width and avg. quality min.
-	mid = options.mid
-	mid_q = options.mid_q
+	mid = str(options.mid)
+	mid_q = str(options.mid_q)
 	
 	#faqcs target score. Lower = less aggressive, higher = more aggressive
-	score = options.score
+	score = str(options.score)
 	
 	#directory to place results. Creates if needed, but won't create multiple dirs.
 	final_output = options.outdir

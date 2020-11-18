@@ -4,6 +4,7 @@ dependencies:
   - falco
   - seqtk
   - fastp
+  - pigz
   - multitrim
   
 channels:
