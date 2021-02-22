@@ -9,7 +9,14 @@ import multiprocessing
 import re
 import shutil
 from datetime import datetime
-#import gzip
+
+#Reads a file with adapters and uses them as the starting set for adapter identification. By default, uses the current MiGA adapter list
+def read_adapters(adapters_fasta = ""):
+	pass
+	
+#Reads a 2 column tsv with adapter_name:adapter_family. Meant to include adapters on a per-kit basis. By default, includes all kits in the MiGA adapter list.
+def import_adapter_families(families_file = ""):
+	pass
 
 #This contains code which generates a complete list of illumina adapters from scratch
 def generate_adapters_temporary_file():
@@ -399,6 +406,7 @@ def names_se(reads, outdir = ".", prefix = ""):
 	
 	return pre_qc, post_qc, post_trim_reads
 
+#DSRC needs its own. Whoops.
 def do_falco(read_name_tool):
 	'''
 	Falco does not support naming files, but does support selecting output directory.
@@ -407,23 +415,27 @@ def do_falco(read_name_tool):
 	we get around this issue by generating the generically named files in a temp dir
 	and then move the results to the final location with an appropriate rename.
 	'''
+	
 	#temp directory
 	loc = tempfile.mkdtemp()
 	
 	reads = read_name_tool[0]
 	output_name = read_name_tool[1]
 	falco_path = read_name_tool[2]
-	
+		
 	#falco command
 	command = [falco_path, "--quiet", "-o", loc, reads]
+	#command = [falco_path, "-o", loc, reads]
+	
 	
 	#run the command
 	#Working perfectly, the falco call should not produce any output. Until falco has bugs patched, it's not working perfectly
 	#subprocess.call(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 	subprocess.call(command)
 	
+	
 	#move the results and rename
-	#I'm... just gonna move the html.
+	#I'm just gonna move the html.
 	#shutil.move(loc+"/fastqc_data.txt",    output_name + ".data.txt")
 	shutil.move(loc+"/fastqc_report.html", output_name + ".html")
 	
@@ -432,7 +444,7 @@ def do_falco(read_name_tool):
 	
 	return None
 	
-#do all QC at once
+#do all QC at once - now old
 def falco_qc_pe(pre_trim_reads_f, pre_trim_reads_r, post_trim_reads_f, post_trim_reads_r, pre_name_f, post_name_f, pre_name_r, post_name_r, threads, falco_binary):
 	pre_forward = [pre_trim_reads_f, pre_name_f, falco_binary]
 	pre_reverse = [pre_trim_reads_r, pre_name_r, falco_binary]
@@ -449,7 +461,7 @@ def falco_qc_pe(pre_trim_reads_f, pre_trim_reads_r, post_trim_reads_f, post_trim
 	
 	pool.close()
 
-#do all QC at once
+#do all QC at once - now old
 def falco_qc_se(pre_trim_reads, post_trim_reads, pre_name, post_name, threads, falco_binary):
 	pre = [pre_trim_reads, pre_name, falco_binary]
 	post = [post_trim_reads+".gz", post_name, falco_binary]
@@ -652,7 +664,7 @@ def parse_adapters(full_list, detected_adapters, output, prefix = ""):
 	return(output+"/"+ prefix + "detected_adapters.fasta")
 	
 #paired end version of the full trim; trims using detected adapters with FaQCs -q 27, then fastp --cut_right window 3 qual 20
-def full_trim_pe(forward_in, reverse_in, forward_out, reverse_out, directory, adapters, threads, faqcs, fastp, score, minlen, window, window_qual, prefix, phred_fmt = "33", advanced = False, skip_fastp = False, skip_faqcs = False):
+def full_trim_pe(forward_in, reverse_in, forward_out, reverse_out, directory, adapters, threads, faqcs, fastp, score, minlen, window, window_qual, prefix, compressor, compress_level, phred_fmt = "33", advanced = False, skip_fastp = False, skip_faqcs = False):
 	'''
 	Command structure:
 	
@@ -739,12 +751,12 @@ def full_trim_pe(forward_in, reverse_in, forward_out, reverse_out, directory, ad
 		#remove this one in any event. We don't want any unpaireds with paired end - the call has to be duplicated, unfortunately.
 		os.remove(directory+"/reads.unpaired.trimmed.fastq")
 		
-	compress_results([forward_out, reverse_out], threads)
+	compress_results([forward_out, reverse_out], threads, compressor, compress_level)
 	
 	return None
 	
 #single end version of the full trim; trims using detected adapters with FaQCs -q 27, then fastp --cut_right window 3 qual 20
-def full_trim_se(reads_in, reads_out, directory, adapters, threads, faqcs, fastp, score, minlen, window, window_qual, prefix, phred_fmt = "33", advanced = False, skip_fastp = False, skip_faqcs = False):
+def full_trim_se(reads_in, reads_out, directory, adapters, threads, faqcs, fastp, score, minlen, window, window_qual, prefix, compressor, compress_level, phred_fmt = "33", advanced = False, skip_fastp = False, skip_faqcs = False):
 	'''
 	Command structure:
 	
@@ -809,43 +821,181 @@ def full_trim_se(reads_in, reads_out, directory, adapters, threads, faqcs, fastp
 		#remove FaQCs files if fastp has results or skip if FaQCs not run.
 		os.remove(directory+"/reads.unpaired.trimmed.fastq")
 	
-	compress_results([reads_out], threads)
+	compress_results([reads_out], threads, compressor, compress_level)
 	
 	return None
 
-#Uses pigz to compress results	
-def compress_results(files, threads):
-
+#compress results using selected compressor.
+def compress_results(output_files, threads, compressor, level):
+	
+	#Just for printing feedback.
+	pretty_compressor = ["GZIP", "PIGZ", "DSRC-2"][["gzip", "pigz", "dsrc"].index(compressor)]
+	
 	time_format = "%d/%m/%Y %H:%M:%S"
-
-	for i in range(0, len(files)):
-		timer = datetime.now()
-		printable_time = timer.strftime(time_format)
-		print("Compressing", files[i], "Starting at:", printable_time)
+	timer = datetime.now()
+	printable_time = timer.strftime(time_format)
+	print("Beginning compression of trimmed reads using", pretty_compressor, "at:", printable_time)
+	
+	#These get the file sizes, runtimes, compression ratio
+	if compressor == "gzip":
+		gzip_compress_module(output_files, threads, level)
 		
-		#pigz_comm = ["pigz", "--best", "-p", str(threads), files[i]]
-		pigz_comm = ["pigz", "-p", str(threads), files[i]]
-		
-		subprocess.run(pigz_comm)
-		
-		
-		
+	if compressor == "pigz":
+		pigz_compress_module(output_files, threads, level)
+	
+	'''	
+	if compressor == "dsrc":
+		dsrc_compress_module(output_files, threads, level)
+	
+	'''
+	
 	print("Outputs compressed!")
 	
 	return None
 
-#deprecated
-#Assuming fastp is skipped, the FaQCs output would be uncompressed. This compresses it.
-def compress_faqcs(command_arr):
-	in_file, out_file = command_arr[0], command_arr[1]
-	print("Compressing "+in_file+"...", end = "")
-	with open(in_file, 'rb') as f_in:
-		with gzip.open(out_file, 'wb') as f_out:
-			shutil.copyfileobj(f_in, f_out)
-	os.remove(in_file)
+#gzip is NOT threaded, so we open up to 4 threads and compress each input simultaneously, feeding the results to falco as we go.
+def gzip_compress_module(outputs, threads, level):
+	#Get the gzip set up for each file
+	gzip_arguments = []
+	for file in outputs:
+		gzip_arguments.append(["gzip", "-"+str(level), file])
+	
+	#Don't open more threads than you have to.
+	num_files = len(outputs)
+	#Run args
+	pool = multiprocessing.Pool(min(threads, num_files))
+	pool.map(do_gzip_pretty, gzip_arguments)
+	pool.close()
 	
 	return None
 
+#The particular parallelization for this is a bother.
+def do_gzip_pretty(compress_argument):
+	file = compress_argument[2]
+	start_time = datetime.now()
+	initial_size = os.path.getsize(file)
+	
+	subprocess.call(compress_argument)
+	
+	final_size = os.path.getsize(file+".gz")
+	end_time = datetime.now()
+	
+	pretty_print_file_size(file, initial_size, final_size, start_time, end_time)
+	
+	return None
+	
+	
+#pigz is threaded, so compression happens 1 file at a time using all threads, then falco QC 4 using the gzip approach above since the result is in gzip format
+def pigz_compress_module(outputs, threads, level):
+	for file in outputs:
+		start_time = datetime.now()
+		initial_size = os.path.getsize(file)
+		
+		pigz_argument = ["pigz", "-"+str(level), "-p", str(threads), file]
+		subprocess.call(pigz_argument)
+		
+		final_size = os.path.getsize(file+".gz")
+		end_time = datetime.now()
+		
+		pretty_print_file_size(file, initial_size, final_size, start_time, end_time)
+		
+	return None
+	
+#Unfinished, Has more moving parts to take care of.
+#DSRC-2 is threaded, but the compressed format is not supported by falco. Thus, we run QC, THEN compress each file 1 at a time using all threads.
+def dsrc_compress_module(inputs, outputs, threads, level):
+	print("DSRC-2 will also produce QC reports at this time!")
+
+	#DSRC only accepts up to 64 threads
+	if threads > 64:
+		threads = 64
+	
+	#DSRC-formatted args
+	threads = "-t"+str(threads)	
+	level   = "-m"+str(level)
+	
+	#falco goes here for DSRC-2, must be uncompressed files.
+	num_files = min(threads, len(inputs)+len(outputs))
+	
+	
+	for file in files:
+		output_file_name = file+".dsrc"
+	
+		start_time = datetime.now()
+		initial_size = os.path.getsize(files[i])
+		
+		compress_command = ["dsrc", "c", threads, level, file, output_file_name]
+		subprocess.run(compress_command)
+		
+		ending_size = os.path.getsize(output_file_name)
+		end_time = datetime.now()
+		
+		pretty_print_file_size(files[i], initial_size, ending_size, start_time, end_time)
+		
+	print("Compression and QC complete!")
+
+#Unfinished.
+#Function for checking if an input file is a DSRC archive - these have to be decompressed for trimming, since the tools don't directly support such archives.
+def check_is_dsrc(file):
+	#We're going to make a file in a temporary directory and use it
+	base_name = os.path.basename(file)
+	loc = tempfile.mkdtemp()
+	tempout = loc + "/" + base_name
+	is_dsrc = False
+	
+	#Attempt to DSRC decompress into the temp file
+	try:
+		#Multiple reasons this could fail, including tool absence. All should be handled by this except.
+		dsrc_decomp = ["dsrc", "d", file, tempout]
+		subprocess.run(dsrc_decomp, stdout = subprocess.DEVNULL, stderr = subprocess.DEVNULL)
+		#DSRC only creates the file if it's successful in opening the file and DSRC can be called in the first place.
+		is_dsrc = os.path.exists(tempout)
+	#If the file cannot be decompressed, delete the temp file and return self.
+	except:
+		shutil.rmtree(loc)
+		
+	if is_dsrc:
+		dsrc_file = tempout
+	else:
+		dsrc_file = file
+		
+	return is_dsrc, dsrc_file
+
+#Convert a file's size in bytes to human-readable format.	
+def humansize(nbytes):
+	suffixes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
+	i = 0
+	while nbytes >= 1024 and i < len(suffixes)-1:
+		nbytes /= 1024.
+		i += 1
+	f = ('%.2f' % nbytes).rstrip('0').rstrip('.')
+	return '%s %s' % (f, suffixes[i])
+	
+#Print well-formatted compression time info.
+def pretty_print_file_size(name, start, end, start_time, end_time):
+	runtime = end_time - start_time
+	
+	try:
+		hours = runtime.hours
+	except:
+		hours = 0
+		
+	try:
+		minutes = runtime.minutes
+	except:
+		minutes = 0
+		
+	try:
+		seconds = runtime.seconds
+	except:
+		seconds = 0
+	
+	runtime = '%02d:%02d:%02d' % (hours, minutes, seconds)
+		
+	print(name, "compressed! Compression took:", runtime, "and the file was compressed to",  str(round((end/start)*100, 2)), "percent of original size from", humansize(start), "to", humansize(end))
+	
+	return None
+	
 #Stolen from a SO thread on how to issue usage information on an error.
 class MyParser(argparse.ArgumentParser):
     def error(self, message):
@@ -853,6 +1003,7 @@ class MyParser(argparse.ArgumentParser):
         self.print_help()
         sys.exit(2)
 
+#Option parsing
 def gather_opts():
 	parser = MyParser(description=''' This program is designed to facilitate effective trimming of your reads.
 	It will help to identify the presence of adapters in your reads, trim those adapters and the reads efficiently,
@@ -875,7 +1026,7 @@ def gather_opts():
 	parser.add_argument("--prefix", "-p", dest = "pref", default = "", help = "Prefix to place on outputs.")
 	
 	#Adapter detection opts
-	parser.add_argument("--min_adapt_pres", "-m", dest = "minpres", default = 0.1, help = "Minimum presence of an adapter for it to be considered present in a set of reads.")
+	parser.add_argument("--min_adapt_pres", "-m", dest = "minpres", default = 0.1, help = "Minimum presence of an adapter for it to be considered present in a set of reads. Default 0.1, so an adapter is considered present if detected in 0.1 percent of reads.")
 	
 	#Shared options
 	parser.add_argument("--min_L", "-l", dest = "length", default = "50", help = "Minimum read length. Default 50 base pairs.")
@@ -891,10 +1042,20 @@ def gather_opts():
 	parser.add_argument("--window_qual", "-q", dest = "mid_q", default = "20", help = "Trim quality cutoff for trimmomatic window. Default 20.")
 	parser.add_argument("--skip_fastp", dest = "skip_fp", action = 'store_true', help = "Do not trim with fastp (use FaQCs only). Cannot skip both.")
 	
-	parser.add_argument("--falco", dest = "falco_path", default = "falco", help = "Location of Falco QC binary.")
-	parser.add_argument("--seqtk", dest = "seqtk_path", default = "seqtk", help = "Location of SeqTK binary.")
-	parser.add_argument("--faqcs", dest = "faqcs_path", default = "FaQCs", help = "Location of FaQCs binary.")
-	parser.add_argument("--fastp", dest = "fastp_path", default = "fastp", help = "Location of fastp binary.")
+	#parser.add_argument("--falco", dest = "falco_path", default = "falco", help = "Location of Falco QC binary.")
+	#parser.add_argument("--seqtk", dest = "seqtk_path", default = "seqtk", help = "Location of SeqTK binary.")
+	#parser.add_argument("--faqcs", dest = "faqcs_path", default = "FaQCs", help = "Location of FaQCs binary.")
+	#parser.add_argument("--fastp", dest = "fastp_path", default = "fastp", help = "Location of fastp binary.")
+	
+	#Update with DSRC later
+	#parser.add_argument("--zip", dest = "compressor", default = "gzip", help = "Select a compressor for outputs. Supported options are: 'gzip' (default), 'pigz', 'dsrc'")
+	#-1 default value used for automating pigz/gzip vs dsrc selection
+	#parser.add_argument("--level", dest = "zip_level", default = -1, help = "Choose a compression level for outputs. gzip, pigz take values 1-9 with default 6. DSRC takes 0-2 with default 0. Higher values are slower but compress better.")
+	
+	parser.add_argument("--zip", dest = "compressor", default = "gzip", help = "Select a compressor for outputs. Supported options are: 'gzip' (default), 'pigz'")
+	#-1 default value used for automating pigz/gzip vs dsrc selection
+	parser.add_argument("--level", dest = "zip_level", default = -1, help = "Choose a compression level for outputs. gzip and pigz take values 1-9 with default 6")
+	
 	
 	return(parser, parser.parse_args())
 
@@ -925,10 +1086,16 @@ def main():
 			prefix = prefix + "_"
 	
 	#tool binaries
-	fp = options.fastp_path
-	fq = options.faqcs_path
-	stk = options.seqtk_path
-	that_aint_falco = options.falco_path
+	#fp = options.fastp_path
+	#fq = options.faqcs_path
+	#stk = options.seqtk_path
+	#that_aint_falco = options.falco_path
+	
+	#tool binaries
+	fp = "fastp"
+	fq = "FaQCs"
+	stk = "seqtk"
+	that_aint_falco = "falco"
 	
 	#Get the reads
 	f = options.f
@@ -1013,7 +1180,8 @@ def main():
 		if not os.path.exists(u): 
 			print("Unpaired Reads: " + u + " not found. Multitrim will exit.")
 			quit()
-	
+			
+			
 	#Check if a directory is specified and which doesn't exist; try to create if needed or exit gracefully.
 	#This has to happen last, or it risks making the directory when the program is otherwise going to quit.
 	if final_output != ".":
@@ -1023,7 +1191,36 @@ def main():
 			except:
 				print("Multitrim wasn't able to find or create the specified output directory. Exiting program.")
 				quit()
-
+				
+	
+	compressor = options.compressor
+	compression_level = int(options.zip_level)
+	
+	#if compressor not in ['gzip', 'pigz', 'dsrc']:
+	if compressor not in ['gzip', 'pigz']:
+		#print("Chosen compressor '"+compressor+"' not supported! Supported options are: 'gzip', 'pigz', 'dsrc'")
+		print("Chosen compressor '"+compressor+"' not supported! Supported options are: 'gzip', 'pigz'")
+		quit()
+		
+	if compressor in ['gzip', 'pigz']:
+		if compression_level == -1:
+			compression_level = 6
+		
+		if not 1 <= compression_level <= 9:
+			print("Compression level", compression_level, "not acceptable! For GZIP and PIGZ, supported compression levels are 1-9!")
+			quit()
+		
+	#For DSRC development later
+	'''
+	if compressor in ['dsrc']:
+		if compression_level == -1:
+			compression_level = 0
+		
+		if not 0 <= compression_level <= 3:
+			print("Compression level", compression_level, "not acceptable! For DSRC-2, supported compression levels are 0-2!")
+			quit()
+	'''
+			
 	#User feedback
 	if final_output == ".":
 		print("Placing results in:", os.getcwd())
@@ -1048,9 +1245,10 @@ def main():
 		
 		adapters_detected = adapter_identification_pe(complete_adapter_file_name, stk, fq, f, r, threads, final_output, minpres, prefix, phred)
 		cleaned_adapters = parse_adapters(adapter_set, adapters_detected, final_output, prefix)
-		full_trim_pe(f, r, post_trim_f, post_trim_r, final_output, cleaned_adapters, threads, fq, fp, score, minlen, mid, mid_q, prefix, phred, advanced, skip_fp, skip_fq)
-		#pre_trim_reads_f, pre_trim_reads_r, post_trim_reads_f, post_trim_reads_r, pre_name_f, post_name_f, pre_name_r, post_name_r, threads, falco_binary)
-		falco_qc_pe(f, r, post_trim_f, post_trim_r, pre_qc_f, post_qc_f, pre_qc_r, post_qc_r, threads, that_aint_falco)
+		full_trim_pe(f, r, post_trim_f, post_trim_r, final_output, cleaned_adapters, threads, fq, fp, score, minlen, mid, mid_q, prefix, compressor, compression_level, phred, advanced, skip_fp, skip_fq)
+		
+		if compressor not in ["dsrc"]:
+			falco_qc_pe(f, r, post_trim_f, post_trim_r, pre_qc_f, post_qc_f, pre_qc_r, post_qc_r, threads, that_aint_falco)
 		
 	else:
 		#one input; SE behavior
@@ -1062,9 +1260,10 @@ def main():
 		
 		adapters_detected = adapter_identification_se(complete_adapter_file_name, stk, fq, u, threads, final_output, minpres, prefix, phred)
 		cleaned_adapters = parse_adapters(adapter_set, adapters_detected, final_output, prefix)
-		full_trim_se(u, post_trim, final_output, cleaned_adapters, threads, fq, fp, score, minlen, mid, mid_q, prefix, phred, advanced, skip_fp, skip_fq)
-		#pre_trim_reads_f, pre_trim_reads_r, post_trim_reads_f, post_trim_reads_r, pre_name_f, post_name_f, pre_name_r, post_name_r, threads, falco_binary)
-		falco_qc_se(u, post_trim, pre_qc, post_qc, threads, that_aint_falco)
+		full_trim_se(u, post_trim, final_output, cleaned_adapters, threads, fq, fp, score, minlen, mid, mid_q, prefix, compressor, compression_level, phred, advanced, skip_fp, skip_fq)
+		
+		if compressor not in ["dsrc"]:
+			falco_qc_se(u, post_trim, pre_qc, post_qc, threads, that_aint_falco)
 	
 	print("Trimming complete.")
 	
@@ -1073,7 +1272,6 @@ if __name__ == "__main__":
 	main()
 
 
-	
 #End of functional components of Multitrim.	
 
 #Leftover creation functions that could be used to update the list of adapters. Not used in the program proper.
