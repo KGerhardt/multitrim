@@ -56,10 +56,15 @@ def family_detection(adapter_seqs):
 	rnapcr
 	trueseq2
 	nextera
+	cre-loxp
+	truseq1
+	pcr_primer
+	nextera_junction
 	'''
 	
 	#There are some repeats in adapters. All are added - this meant to make the program as conservative as possible.
 	fam_to_id_to_seq = {}
+	#MiGA adapters
 	fam_to_id_to_seq['singleend'] = {'Illumina_Single_End_Apapter_1': 'ACACTCTTTCCCTACACGACGCTGTTCCATCT', 'Illumina_Single_End_Apapter_2': 'CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT', 'Illumina_Single_End_PCR_Primer_1': 'AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT', 'Illumina_Single_End_PCR_Primer_2': 'CAAGCAGAAGACGGCATACGAGCTCTTCCGATCT', 'Illumina_Single_End_Sequencing_Primer': 'ACACTCTTTCCCTACACGACGCTCTTCCGATCT'}
 	fam_to_id_to_seq['pairedend'] = {'Illumina_Paired_End_Adapter_1': 'ACACTCTTTCCCTACACGACGCTCTTCCGATCT', 'Illumina_Paired_End_Adapter_2': 'CTCGGCATTCCTGCTGAACCGCTCTTCCGATCT', 'Illumina_Paried_End_PCR_Primer_1': 'AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATCT', 'Illumina_Paired_End_PCR_Primer_2': 'CAAGCAGAAGACGGCATACGAGATCGGTCTCGGCATTCCTGCTGAACCGCTCTTCCGATCT', 'Illumina_Paried_End_Sequencing_Primer_1': 'ACACTCTTTCCCTACACGACGCTCTTCCGATCT', 'Illumina_Paired_End_Sequencing_Primer_2': 'CGGTCTCGGCATTCCTACTGAACCGCTCTTCCGATCT'}
 	fam_to_id_to_seq['dpnII'] = {'Illumina_DpnII_expression_Adapter_1': 'ACAGGTTCAGAGTTCTACAGTCCGAC', 'Illumina_DpnII_expression_Adapter_2': 'CAAGCAGAAGACGGCATACGA', 'Illumina_DpnII_expression_PCR_Primer_1': 'CAAGCAGAAGACGGCATACGA', 'Illumina_DpnII_expression_PCR_Primer_2': 'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA', 'Illumina_DpnII_expression_Sequencing_Primer': 'CGACAGGTTCAGAGTTCTACAGTCCGACGATC', 'Illumina_NlaIII_expression_Adapter_1': 'ACAGGTTCAGAGTTCTACAGTCCGACATG', 'Illumina_NlaIII_expression_Adapter_2': 'CAAGCAGAAGACGGCATACGA', 'Illumina_NlaIII_expression_PCR_Primer_1': 'CAAGCAGAAGACGGCATACGA', 'Illumina_NlaIII_expression_PCR_Primer_2': 'AATGATACGGCGACCACCGACAGGTTCAGAGTTCTACAGTCCGA', 'Illumina_NlaIII_expression_Sequencing_Primer': 'CCGACAGGTTCAGAGTTCTACAGTCCGACATG'}
@@ -73,8 +78,12 @@ def family_detection(adapter_seqs):
 	fam_to_id_to_seq['abi'] = {'ABI_Dynabead_EcoP_Oligo': 'CTGATCTAGAGGTACCGGATCCCAGCAGT', 'ABI_Solid3_Adapter_A': 'CTGCCCCGGGTTCCTCATTCTCTCAGCAGCATG', 'ABI_Solid3_Adapter_B': 'CCACTACGCCTCCGCTTTCCTCTCTATGGGCAGTCGGTGAT', 'ABI_Solid3_5_AMP_Primer': 'CCACTACGCCTCCGCTTTCCTCTCTATG', 'ABI_Solid3_3_AMP_Primer': 'CTGCCCCGGGTTCCTCATTCT', 'ABI_Solid3_EF1_alpha_Sense_Primer': 'CATGTGTGTTGAGAGCTTC', 'ABI_Solid3_EF1_alpha_Antisense_Primer': 'GAAAACCAAAGTGGTCCAC', 'ABI_Solid3_GAPDH_Forward_Primer': 'TTAGCACCCCTGGCCAAGG', 'ABI_Solid3_GAPDH_Reverse_Primer': 'CTTACTCCTTGGAGGCCATG'}
 	fam_to_id_to_seq['trueseq2'] = {'TruSeq2_SE': 'AGATCGGAAGAGCTCGTATGCCGTCTTCTGCTTG', 'TruSeq2_PE_f': 'AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT', 'TruSeq2_PE_r': 'AGATCGGAAGAGCGGTTCAGCAGGAATGCCGAG', 'TruSeq3_IndexedAdapter': 'AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC', 'TruSeq3_UniversalAdapter': 'AGATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTA'}
 	fam_to_id_to_seq['nextera'] = {'Nextera_PE_PrefixNX/1': 'AGATGTGTATAAGAGACAG', 'Nextera_PE_PrefixNX/2': 'AGATGTGTATAAGAGACAG', 'Nextera_PE_Trans1': 'TCGTCGGCAGCGTCAGATGTGTATAAGAGACAG', 'Nextera_PE_Trans1_rc': 'CTGTCTCTTATACACATCTGACGCTGCCGACGA', 'Nextera_PE_Trans2': 'GTCTCGTGGGCTCGGAGATGTGTATAAGAGACAG', 'Nextera_PE_Trans2_rc': 'CTGTCTCTTATACACATCTCCGAGCCCACGAGAC'}
-	
-	#We do want to retain the user's ID names where we can...
+	#FaQCs adapters for safety
+	fam_to_id_to_seq['cre-loxp'] = {'cre-loxp-forward' : 'TCGTATAACTTCGTATAATGTATGCTATACGAAGTTATTACG', 'cre-loxp-reverse' : 'AGCATATTGAAGCATATTACATACGATATGCTTCAATAATGC'}
+	fam_to_id_to_seq['truseq1'] = {'TruSeq-adapter-1' : 'GGGGTAGTGTGGATCCTCCTCTAGGCAGTTGGGTTATTCTAGAAGCAGATGTGTTGGCTGTTTCTGAAACTCTGGAAAA', 'TruSeq-adapter-3' : 'CAACAGCCGGTCAAAACATCTGGAGGGTAAGCCATAAACACCTCAACAGAAAA'}
+	fam_to_id_to_seq['pcr_primer'] = {'PCR-primer-1' : 'CGATAACTTCGTATAATGTATGCTATACGAAGTTATTACG', 'PCR-primer-2' : 'GCATAACTTCGTATAGCATACATTATACGAAGTTATACGA'}
+	fam_to_id_to_seq['nextera_junction'] = {'Nextera-junction-adapter-1' : 'CTGTCTCTTATACACATCTAGATGTGTATAAGAGACAG'}
+	fam_to_id_to_seq['Nextera-primer-adapter'] = {'Nextera-primer-adapter-1' : 'GATCGGAAGAGCACACGTCTGAACTCCAGTCAC', 'Nextera-primer-adapter-2' : 'GATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT'}
 	
 	detected_fams = []
 	#for each user sequence
@@ -288,6 +297,27 @@ def generate_adapters_temporary_file():
 	adapters_dict["Nextera_PE_Trans1_rc"] = "CTGTCTCTTATACACATCTGACGCTGCCGACGA"
 	adapters_dict["Nextera_PE_Trans2"] = "GTCTCGTGGGCTCGGAGATGTGTATAAGAGACAG"
 	adapters_dict["Nextera_PE_Trans2_rc"] = "CTGTCTCTTATACACATCTCCGAGCCCACGAGAC"
+	
+	#Below are the adapters present in FaQCs by default.
+	
+	#Cre-loxp family
+	adapters_dict["cre-loxp-forward"] = "TCGTATAACTTCGTATAATGTATGCTATACGAAGTTATTACG"
+	adapters_dict["cre-loxp-reverse"] = "AGCATATTGAAGCATATTACATACGATATGCTTCAATAATGC"
+	
+	#TruSeq 1 family
+	adapters_dict["TruSeq-adapter-1"] = "GGGGTAGTGTGGATCCTCCTCTAGGCAGTTGGGTTATTCTAGAAGCAGATGTGTTGGCTGTTTCTGAAACTCTGGAAAA"
+	adapters_dict["TruSeq-adapter-3"] = "CAACAGCCGGTCAAAACATCTGGAGGGTAAGCCATAAACACCTCAACAGAAAA"
+	
+	#PCR primers
+	adapters_dict["PCR-primer-1"] = "CGATAACTTCGTATAATGTATGCTATACGAAGTTATTACG"
+	adapters_dict["PCR-primer-2"] = "GCATAACTTCGTATAGCATACATTATACGAAGTTATACGA"
+	
+	#Nextera Junction family
+	adapters_dict["Nextera-junction-adapter-1"] = "CTGTCTCTTATACACATCTAGATGTGTATAAGAGACAG"
+	
+	#Nextera-primer-adapter family; these are copies of earlier adapters in this list, but I want to make sure they're detectable since they're internal to FaQCs
+	adapters_dict["Nextera-primer-adapter-1"] = "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC"
+	adapters_dict["Nextera-primer-adapter-2"] = "GATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
 		
 	all_adapters = tempfile.NamedTemporaryFile(mode = "w", delete = False)
 		
@@ -565,7 +595,10 @@ def parse_adapters(full_list, detected_adapters, output, prefix = ""):
 	
 	detected_seqs = {}
 	for id in detected_adapters:
-		detected_seqs[id] = full_list[id]
+		if id in full_list:
+			detected_seqs[id] = full_list[id]
+		else:
+			print("Adapter", id, "not found in Multitrim's adapter list! It will NOT be included in trimming.")
 		
 	adapters_by_family = family_detection(detected_seqs)
 	
