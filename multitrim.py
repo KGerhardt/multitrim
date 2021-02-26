@@ -613,7 +613,7 @@ def parse_adapters(full_list, detected_adapters, output, prefix = ""):
 		else:
 			print("Adapter sequence:", id, "not found in Multitrim's adapter list! It will NOT be included in trimming.")
 		
-	adapters_by_family = family_detection(detected_seqs)
+	adapters_by_family = family_detection(detected_seqs)	
 	
 	#This is a file I don't want to be temporary. It both helps identify the adapters present in a dataset and provides a fasta for a user to reuse
 	subset = open(output + "/" + prefix + "detected_adapters.fasta", "w")
