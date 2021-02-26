@@ -39,7 +39,7 @@ def read_adapters(adapters_fasta):
 		adapt.close()
 	
 	return adapters, adapters_fasta, cleanup
-	
+
 #Only contains adapters we already recognize as part of a kit. It will need updated as new ones may be added.
 def family_detection(adapter_seqs):
 	#Currently acceptable fams:
@@ -297,7 +297,23 @@ def generate_adapters_temporary_file():
 	adapters_dict["Nextera_PE_Trans1_rc"] = "CTGTCTCTTATACACATCTGACGCTGCCGACGA"
 	adapters_dict["Nextera_PE_Trans2"] = "GTCTCGTGGGCTCGGAGATGTGTATAAGAGACAG"
 	adapters_dict["Nextera_PE_Trans2_rc"] = "CTGTCTCTTATACACATCTCCGAGCCCACGAGAC"
+		
+	all_adapters = tempfile.NamedTemporaryFile(mode = "w", delete = False)
+		
+	for adapt in adapters_dict:
+		print(">"+adapt, file = all_adapters)
+		print(adapters_dict[adapt], file = all_adapters)
 	
+	name = all_adapters.name
+	all_adapters.close()
+	
+	return adapters_dict, name
+
+#FaCQs supports external adapter sequences, but has no option to EXCLUDE its own internal adapters while doing so. 
+#This function returns a dict of ID:adapter for the FaQCs internal sequences so that Multitrim doesn't break should a FaQCs adapter
+#appear in parse_adapters
+def faqcs_internal_adapters():
+	adapters_dict = {}
 	#Below are the adapters present in FaQCs by default.
 	
 	#Cre-loxp family
@@ -318,18 +334,9 @@ def generate_adapters_temporary_file():
 	#Nextera-primer-adapter family; these are copies of earlier adapters in this list, but I want to make sure they're detectable since they're internal to FaQCs
 	adapters_dict["Nextera-primer-adapter-1"] = "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC"
 	adapters_dict["Nextera-primer-adapter-2"] = "GATCGGAAGAGCGTCGTGTAGGGAAAGAGTGT"
-		
-	all_adapters = tempfile.NamedTemporaryFile(mode = "w", delete = False)
-		
-	for adapt in adapters_dict:
-		print(">"+adapt, file = all_adapters)
-		print(adapters_dict[adapt], file = all_adapters)
 	
-	name = all_adapters.name
-	all_adapters.close()
+	return(adapters_dict)
 	
-	return adapters_dict, name
-
 #Get file names right up front for ease of use
 def names_pe(forward, reverse, outdir = ".", prefix = ""):	
 	forward_basename = os.path.basename(os.path.normpath(forward))
@@ -593,12 +600,18 @@ def parse_adapters(full_list, detected_adapters, output, prefix = ""):
 		
 	#detected adapters is just a list of the user's detected adapters by ID.
 	
+	faqcs_internal_adapter_list = faqcs_internal_adapters()
+	
 	detected_seqs = {}
 	for id in detected_adapters:
 		if id in full_list:
+			print("Adapter sequence:", id, "detected.")
 			detected_seqs[id] = full_list[id]
+		if id in faqcs_internal_adapter_list:
+			print("Adapter sequence:", id, "detected. This adapter is part of a non-optional internal list used by FaQCs and will be included.")
+			detected_seqs[id] = faqcs_internal_adapter_list[id]
 		else:
-			print("Adapter", id, "not found in Multitrim's adapter list! It will NOT be included in trimming.")
+			print("Adapter sequence:", id, "not found in Multitrim's adapter list! It will NOT be included in trimming.")
 		
 	adapters_by_family = family_detection(detected_seqs)
 	
