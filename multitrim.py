@@ -602,15 +602,20 @@ def parse_adapters(full_list, detected_adapters, output, prefix = ""):
 	
 	faqcs_internal_adapter_list = faqcs_internal_adapters()
 	
+	found = False
 	detected_seqs = {}
 	for id in detected_adapters:
+		found = False
 		if id in full_list:
+			found = True
 			print("Adapter sequence:", id, "detected.")
 			detected_seqs[id] = full_list[id]
 		if id in faqcs_internal_adapter_list:
+			found = True
 			print("Adapter sequence:", id, "detected. This adapter is part of a non-optional internal list used by FaQCs and will be included.")
 			detected_seqs[id] = faqcs_internal_adapter_list[id]
-		else:
+		#Skip adapter if it cannot be found. Should never happen, now that FaQCs' adapters will always be found and other seqs must be from internal or supplied sequences file
+		if not found:
 			print("Adapter sequence:", id, "not found in Multitrim's adapter list! It will NOT be included in trimming.")
 		
 	adapters_by_family = family_detection(detected_seqs)	
@@ -821,7 +826,7 @@ def gzip_compress_module(outputs, threads, level):
 	#Get the gzip set up for each file
 	gzip_arguments = []
 	for file in outputs:
-		gzip_arguments.append(["gzip", "-"+str(level), file])
+		gzip_arguments.append(["gzip", "-f"+str(level), file])
 	
 	#Don't open more threads than you have to.
 	num_files = len(outputs)
@@ -853,7 +858,7 @@ def pigz_compress_module(outputs, threads, level):
 		start_time = datetime.now()
 		initial_size = os.path.getsize(file)
 		
-		pigz_argument = ["pigz", "-"+str(level), "-p", str(threads), file]
+		pigz_argument = ["pigz", "-f", "-"+str(level), "-p", str(threads), file]
 		subprocess.call(pigz_argument)
 		
 		final_size = os.path.getsize(file+".gz")
@@ -973,9 +978,9 @@ def gather_opts():
 	FaQCs, falco, and seqtk commands, in addition to several python operations which exist to facilitate adapter finding and
 	subsetting. --user and --UNLIMITED_POWER are jokes, but you should usually use --UNLIMITED_POWER.''')
 	#Use all available cores.
-	parser.add_argument("--max", dest = "Sheev", action = 'store_true', help = "Have you ever heard the tragedy of Darth Parallelegius? Uses all available processors.")
+	parser.add_argument("--max", dest = "Sheev", action = 'store_true', help = "Have you ever heard the tragedy of Darth Parallelegius? Detects and uses all available processors for threading.")
 	#Or this many threads. Laaaaame
-	parser.add_argument("--threads", "-t", dest = "threads", default = 1, help = "How many threads do you want to use? Use --max flag to use all of them (DO IT).")
+	parser.add_argument("--threads", "-t", dest = "threads", default = 1, help = "Number of threads to use for parallel processes. Default 1")
 
 	#file inputs
 	parser.add_argument("--forward", "-1", dest = "f", default = "", help = "Forward Strand Reads (use -u for unpaired reads)")
@@ -1027,7 +1032,15 @@ def gather_opts():
 	return(parser, parser.parse_args())
 
 def print_resources():
+	print("Multitrim github: https://github.com/KGerhardt/multitrim")
 	print("MiGA adapters available at: https://github.com/bio-miga/miga/blob/main/utils/adapters.fa")
+	internal_adapters = faqcs_internal_adapters()
+	print("FaQCs mandatory adapters are:")
+	for id in internal_adapters:
+		print(id, internal_adapters[id])
+	print("FaQCs github: https://github.com/LANL-Bioinformatics/FaQCs")
+	print("fastp github: https://github.com/OpenGene/fastp")
+	print("Falco github: https://github.com/smithlabcode/falco")
 	
 #Program Control
 def main():
@@ -1233,8 +1246,6 @@ def main():
 		if needs_cleanup:
 			print("Removing automatically generated adapters...")
 			os.remove(complete_adapter_file_name)
-			
-		quit()
 		
 		full_trim_pe(f, r, post_trim_f, post_trim_r, final_output, cleaned_adapters, threads, fq, fp, score, minlen, mid, mid_q, prefix, compressor, compression_level, phred, advanced, skip_fp, skip_fq)
 		
