@@ -978,7 +978,7 @@ def gather_opts():
 	FaQCs, falco, and seqtk commands, in addition to several python operations which exist to facilitate adapter finding and
 	subsetting. --user and --UNLIMITED_POWER are jokes, but you should usually use --UNLIMITED_POWER.''')
 	#Use all available cores.
-	parser.add_argument("--max", dest = "Sheev", action = 'store_true', help = "Have you ever heard the tragedy of Darth Parallelegius? Detects and uses all available processors for threading.")
+	parser.add_argument("--max", dest = "Sheev", action = 'store_true', help = "Attempts to detect and use all available processors for threading.")
 	#Or this many threads. Laaaaame
 	parser.add_argument("--threads", "-t", dest = "threads", default = 1, help = "Number of threads to use for parallel processes. Default 1")
 
@@ -1044,7 +1044,7 @@ def print_resources():
 	
 #Program Control
 def main():
-	#Keep the parser on hand so I can prent usage as needed.
+	#Keep the parser on hand so I can prent usage as needed.s
 	help_message, options = gather_opts()
 	
 	resources = options.resource_list
@@ -1074,13 +1074,7 @@ def main():
 		if not prefix.endswith("_"):
 			prefix = prefix + "_"
 	
-	#tool binaries
-	#fp = options.fastp_path
-	#fq = options.faqcs_path
-	#stk = options.seqtk_path
-	#that_aint_falco = options.falco_path
-	
-	#tool binaries
+	#Tool names
 	fp = "fastp"
 	fq = "FaQCs"
 	stk = "seqtk"
@@ -1099,7 +1093,19 @@ def main():
 	#Check for --max flag
 	if options.Sheev:
 		#Detects and uses all the threads a system has available.
-		threads = len(os.sched_getaffinity(0))
+		try:
+			threads = len(os.sched_getaffinity(0))
+		except:
+			print("Cannot detect how many cores are available! Defaulting to 1. Use --threads to specify more cores if you see this message.")
+			threads = 1 
+	else:
+		#Check to ensure a user doesn't request more procs than available.
+		try:
+			threads = min(threads, len(os.sched_getaffinity(0)))
+		except:
+			#Handle case where the sched getaffinity function is unavailable.
+			threads = int(options.threads)
+	
 	
 	
 	#No reads shorter than minlen
