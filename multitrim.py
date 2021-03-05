@@ -1100,10 +1100,6 @@ def main():
 	if options.Sheev:
 		#Detects and uses all the threads a system has available.
 		threads = len(os.sched_getaffinity(0))
-	else:
-		#Check to ensure a user doesn't request more procs than available.
-		threads = min(threads, len(os.sched_getaffinity(0)))
-	
 	
 	
 	#No reads shorter than minlen
